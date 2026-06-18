@@ -1,0 +1,824 @@
+{% extends "base.html" %}
+
+{% block title %}{{ article.title }} - Jiayan English Reading{% endblock %}
+
+{% block content %}
+<div class="reading-layout">
+  <aside class="column-left">
+    <section class="card voice-card">
+      <div class="card-header">
+        <h2>🔊 Voice</h2>
+      </div>
+      <div class="voice-selector">
+        <select id="voice-select"></select>
+      </div>
+      <div class="speed-control">
+        <label for="speed-slider">Speed: <span id="speed-value">1.0</span></label>
+        <input type="range" id="speed-slider" min="0.5" max="3" step="0.5" value="1">
+      </div>
+    </section>
+
+    <section class="card vocab-card">
+      <div class="card-header">
+        <h2>🌟 Vocabulary</h2>
+        <div class="header-actions">
+          <button class="btn-mini" onclick="exportVocab()">Export</button>
+          <button class="btn-mini" onclick="loadVocab()">Refresh</button>
+        </div>
+      </div>
+      <ul id="vocab-list" class="vocab-list"></ul>
+      <div class="vocab-add">
+        <input type="text" id="vocab-add-input" placeholder="Add a word" autocomplete="off">
+        <button class="btn-mini" onclick="addVocab()">Add</button>
+      </div>
+    </section>
+
+  </aside>
+
+  <section class="column-middle article-card card">
+    <h1>Reading Content</h1>
+    <article id="article-text" class="article-body">
+      {% for paragraph in reading_text.split('\n\n') %}
+        <p>{{ paragraph }}</p>
+      {% endfor %}
+    </article>
+  </section>
+
+  <aside class="column-right chat-panel card">
+    <div class="chat-header">
+      <h2>💬 Ask Teacher</h2>
+    </div>
+    <div id="chat-history" class="chat-history">
+      <div class="message assistant">Hi! Ask me about any word or question.</div>
+    </div>
+    <div class="chat-input">
+      <input type="text" id="chat-input" placeholder="Ask a question..." autocomplete="off">
+      <button id="mic-btn" class="btn-mic" onclick="toggleMic()" title="Voice question" aria-label="Voice question">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"></path>
+          <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"></path>
+        </svg>
+      </button>
+      <button class="btn-primary" onclick="sendQuestion()">Send</button>
+    </div>
+    <p id="mic-status" class="mic-status hidden">Listening...</p>
+  </aside>
+</div>
+
+<div id="selection-menu" class="selection-menu hidden">
+  <button onclick="speakSelectedFromMenu()">Read</button>
+  <button onclick="translateSelected()">Translate</button>
+  <button onclick="addSelectedToVocab()">Add to Vocab</button>
+  <button onclick="hideSelectionMenu()">Cancel</button>
+</div>
+
+<div id="translation-popup" class="translation-popup hidden">
+  <button class="btn-close" onclick="hideTranslationPopup()">×</button>
+  <p id="translation-text"></p>
+</div>
+
+<audio id="audio-player" preload="auto"></audio>
+
+<div id="audio-fab" class="audio-fab" title="Play/Pause audio">
+  <svg id="audio-fab-icon-play" class="audio-fab-icon" viewBox="0 0 24 24">
+    <path d="M8 5v14l11-7z"/>
+  </svg>
+  <svg id="audio-fab-icon-pause" class="audio-fab-icon hidden" viewBox="0 0 24 24">
+    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+  </svg>
+</div>
+
+<script>
+  const sessionId = {{ session_id | tojson }};
+  let selectedText = '';
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  async function speakText(text) {
+    if (!text) return;
+    try {
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, text })
+      });
+      const data = await res.json();
+      if (data.audio_url) {
+        const player = document.getElementById('audio-player');
+        player.src = data.audio_url;
+        player.play();
+      } else {
+        alert('Read failed: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      alert('Read error: ' + err);
+    }
+  }
+
+  function speakSelectedFromMenu() {
+    if (selectedText) speakText(selectedText);
+    hideSelectionMenu();
+  }
+
+  async function sendQuestion() {
+    const input = document.getElementById('chat-input');
+    const question = input.value.trim();
+    if (!question) return;
+
+    appendMessage('user', question);
+    input.value = '';
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, question })
+      });
+      const data = await res.json();
+      appendMessage('assistant', data.answer || data.error || 'Teacher is thinking...');
+    } catch (err) {
+      appendMessage('assistant', 'Network error, please try again later.');
+    }
+  }
+
+  function appendMessage(role, text) {
+    const history = document.getElementById('chat-history');
+    const div = document.createElement('div');
+    div.className = 'message ' + role;
+    div.textContent = text;
+    history.appendChild(div);
+    history.scrollTop = history.scrollHeight;
+    return div;
+  }
+
+  document.getElementById('chat-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') sendQuestion();
+  });
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const micBtn = document.getElementById('mic-btn');
+  const micStatus = document.getElementById('mic-status');
+  let recognition = null;
+
+  if (!SpeechRecognition) {
+    micBtn.classList.add('hidden');
+  } else {
+    recognition = new SpeechRecognition();
+    recognition.lang = 'zh-CN';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = function() {
+      micStatus.classList.remove('hidden');
+      micBtn.classList.add('recording');
+    };
+
+    recognition.onend = function() {
+      micStatus.classList.add('hidden');
+      micBtn.classList.remove('recording');
+    };
+
+    recognition.onresult = function(event) {
+      const transcript = event.results[0][0].transcript;
+      document.getElementById('chat-input').value = transcript;
+      sendQuestion();
+    };
+
+    recognition.onerror = function(event) {
+      alert('Speech recognition error: ' + event.error);
+      micStatus.classList.add('hidden');
+      micBtn.classList.remove('recording');
+    };
+  }
+
+  function toggleMic() {
+    if (!recognition) return;
+    try {
+      recognition.start();
+    } catch (err) {
+      recognition.stop();
+    }
+  }
+
+  const article = document.getElementById('article-text');
+  const selectionMenu = document.getElementById('selection-menu');
+  const translationPopup = document.getElementById('translation-popup');
+
+  const WORD_RE = /[a-zA-Z0-9'-]+/;
+
+  function findWordBoundary(text, offset, direction) {
+    const matches = Array.from(text.matchAll(/[a-zA-Z0-9'-]+/g));
+
+    if (matches.length === 0) {
+      return direction === -1 ? 0 : text.length;
+    }
+
+    // If offset is inside a word, return that word's boundary.
+    for (const match of matches) {
+      const start = match.index;
+      const end = start + match[0].length;
+      if (offset >= start && offset <= end) {
+        return direction === -1 ? start : end;
+      }
+    }
+
+    // Offset is in whitespace/non-word text: find nearest word boundary.
+    if (direction === -1) {
+      for (let i = matches.length - 1; i >= 0; i--) {
+        const end = matches[i].index + matches[i][0].length;
+        if (end <= offset) return end;
+      }
+    } else {
+      for (const match of matches) {
+        if (match.index >= offset) return match.index;
+      }
+      const last = matches[matches.length - 1];
+      const end = last.index + last[0].length;
+      if (end > offset) return end;
+    }
+    return offset;
+  }
+
+  function normalizeSelectionToWords() {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return '';
+    const range = sel.getRangeAt(0);
+
+    const startNode = range.startContainer;
+    const endNode = range.endContainer;
+
+    if (startNode.nodeType === Node.TEXT_NODE) {
+      const newStart = findWordBoundary(startNode.textContent, range.startOffset, -1);
+      range.setStart(startNode, newStart);
+    }
+    if (endNode.nodeType === Node.TEXT_NODE) {
+      const newEnd = findWordBoundary(endNode.textContent, range.endOffset, 1);
+      range.setEnd(endNode, newEnd);
+    }
+
+    const text = sel.toString().trim();
+    if (!text || !WORD_RE.test(text)) {
+      sel.removeAllRanges();
+      return '';
+    }
+    return text;
+  }
+
+  function showSelectionMenu() {
+    const text = normalizeSelectionToWords();
+    if (!text || text.length > 200) {
+      hideSelectionMenu();
+      return;
+    }
+    selectedText = text;
+
+    const sel = window.getSelection();
+    const range = sel.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    const scrollX = window.scrollX || window.pageXOffset;
+    const scrollY = window.scrollY || window.pageYOffset;
+
+    let left = rect.right + scrollX;
+    let top = rect.bottom + scrollY + 8;
+
+    const menuWidth = 140;
+    if (left + menuWidth > window.innerWidth + scrollX) {
+      left = rect.left + scrollX - menuWidth;
+    }
+
+    selectionMenu.style.left = left + 'px';
+    selectionMenu.style.top = top + 'px';
+    selectionMenu.classList.remove('hidden');
+  }
+
+  function hideSelectionMenu() {
+    selectionMenu.classList.add('hidden');
+  }
+
+  function hideTranslationPopup() {
+    translationPopup.classList.add('hidden');
+  }
+
+  article.addEventListener('mouseup', function(e) {
+    setTimeout(showSelectionMenu, 10);
+  });
+
+  document.addEventListener('mousedown', function(e) {
+    if (!selectionMenu.contains(e.target)) {
+      hideSelectionMenu();
+    }
+    if (!translationPopup.contains(e.target)) {
+      hideTranslationPopup();
+    }
+  });
+
+  async function addSelectedToVocab() {
+    if (!selectedText) return;
+
+    try {
+      const res = await fetch('/api/vocab/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, word: selectedText })
+      });
+      const data = await res.json();
+      if (data.success) {
+        hideSelectionMenu();
+        loadVocab();
+      } else {
+        alert(data.error || 'Failed to add word');
+      }
+    } catch (err) {
+      alert('Failed to add word: ' + err);
+    }
+  }
+
+  async function translateSelected() {
+    if (!selectedText) return;
+    hideSelectionMenu();
+
+    const originalText = selectedText;
+    const messageDiv = appendMessage('assistant', 'Translating "' + originalText + '" ...');
+
+    try {
+      const res = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, text: originalText })
+      });
+      const data = await res.json();
+      const result = data.translation || data.error || 'Translation failed';
+      messageDiv.textContent = originalText + ' → ' + result;
+    } catch (err) {
+      messageDiv.textContent = 'Translation error: ' + err;
+    }
+  }
+
+  async function loadVocab() {
+    const list = document.getElementById('vocab-list');
+    list.innerHTML = '<li>Loading...</li>';
+
+    try {
+      const res = await fetch('/api/vocab?session_id=' + encodeURIComponent(sessionId));
+      const data = await res.json();
+      renderVocabList(data.words);
+    } catch (err) {
+      list.innerHTML = '<li>Failed to load: ' + err + '</li>';
+    }
+  }
+
+  async function addVocab() {
+    const input = document.getElementById('vocab-add-input');
+    const word = input.value.trim();
+    if (!word) return;
+
+    try {
+      const res = await fetch('/api/vocab/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, word })
+      });
+      const data = await res.json();
+      if (data.success) {
+        input.value = '';
+        renderVocabList(data.words);
+      } else {
+        alert(data.error || 'Failed to add word');
+      }
+    } catch (err) {
+      alert('Failed to add word: ' + err);
+    }
+  }
+
+  async function deleteVocab(word) {
+    if (!word) return;
+    try {
+      const res = await fetch('/api/vocab/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, word })
+      });
+      const data = await res.json();
+      if (data.success) {
+        renderVocabList(data.words);
+      } else {
+        alert(data.error || 'Failed to delete word');
+      }
+    } catch (err) {
+      alert('Failed to delete word: ' + err);
+    }
+  }
+
+  function renderVocabList(words) {
+    const list = document.getElementById('vocab-list');
+    list.innerHTML = '';
+    if (words && words.length) {
+      words.forEach(item => {
+        const li = document.createElement('li');
+        li.className = 'vocab-item';
+        li.innerHTML = `
+          <div class="vocab-main">
+            <span class="word">${escapeHtml(item.word)}</span>
+            <span class="count">appears ${item.count} times</span>
+            <span class="level ${item.level}">${item.level}</span>
+          </div>
+          <div class="vocab-actions">
+            <button class="btn-mini" onclick="speakText('${escapeHtml(item.word)}')">Read</button>
+            <button class="btn-mini btn-danger" onclick="deleteVocab('${escapeHtml(item.word)}')">×</button>
+          </div>
+        `;
+        li.addEventListener('mouseenter', () => highlightWordOccurrences(item.word, true));
+        li.addEventListener('mouseleave', () => highlightWordOccurrences(item.word, false));
+        list.appendChild(li);
+      });
+    } else {
+      list.innerHTML = '<li>No new words found yet</li>';
+    }
+  }
+
+  let wordSpanMap = new Map();
+
+function rebuildWordSpanMap() {
+  wordSpanMap.clear();
+  const article = document.getElementById('article-text');
+  if (!article) return;
+  article.querySelectorAll('.word-span').forEach(span => {
+    const key = span.textContent.toLowerCase();
+    if (!wordSpanMap.has(key)) {
+      wordSpanMap.set(key, []);
+    }
+    wordSpanMap.get(key).push(span);
+  });
+}
+
+function highlightWordOccurrences(word, active) {
+  if (!word) return;
+  const target = word.toLowerCase().trim();
+  if (!target) return;
+  const spans = wordSpanMap.get(target);
+  if (!spans) return;
+
+  spans.forEach(span => {
+    if (active) {
+      span.classList.add('word-span-highlight');
+    } else {
+      span.classList.remove('word-span-highlight');
+    }
+  });
+}
+
+  function exportVocab() {
+    window.open('/api/vocab/export?session_id=' + encodeURIComponent(sessionId), '_blank');
+  }
+
+  document.getElementById('vocab-add-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') addVocab();
+  });
+
+  async function loadVoices() {
+    const select = document.getElementById('voice-select');
+    const speedSlider = document.getElementById('speed-slider');
+    const speedValue = document.getElementById('speed-value');
+
+    try {
+      const res = await fetch('/api/voices');
+      const data = await res.json();
+      const voices = data.voices || [];
+      const defaultVoice = data.default || 'af_heart';
+
+      const currentRes = await fetch('/api/voice?session_id=' + encodeURIComponent(sessionId));
+      const currentData = await currentRes.json();
+      const currentVoice = currentData.voice || defaultVoice;
+
+      select.innerHTML = voices.map(v =>
+        `<option value="${v}" ${v === currentVoice ? 'selected' : ''}>${v}</option>`
+      ).join('');
+
+      select.addEventListener('change', async () => {
+        const voice = select.value;
+        try {
+          await fetch('/api/voice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId, voice })
+          });
+        } catch (err) {
+          console.error('Failed to set voice:', err);
+        }
+      });
+
+      const speedRes = await fetch('/api/speed?session_id=' + encodeURIComponent(sessionId));
+      const speedData = await speedRes.json();
+      const currentSpeed = parseFloat(speedData.speed) || 1.0;
+      speedSlider.value = currentSpeed;
+      speedValue.textContent = currentSpeed.toFixed(1);
+
+      speedSlider.addEventListener('input', () => {
+        speedValue.textContent = parseFloat(speedSlider.value).toFixed(1);
+      });
+      speedSlider.addEventListener('change', async () => {
+        const speed = parseFloat(speedSlider.value);
+        speedValue.textContent = speed.toFixed(1);
+        try {
+          await fetch('/api/speed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId, speed })
+          });
+        } catch (err) {
+          console.error('Failed to set speed:', err);
+        }
+      });
+    } catch (err) {
+      console.error('Failed to load voices:', err);
+    }
+  }
+
+  let longPressTimer = null;
+  let touchStartPos = null;
+  let isLongPressSelecting = false;
+  let activeTouchId = null;
+  const LONG_PRESS_DELAY = 500;
+  const TOUCH_MOVE_THRESHOLD = 10;
+
+  function findTouch(touches, id) {
+    for (let i = 0; i < touches.length; i++) {
+      if (touches[i].identifier === id) return touches[i];
+    }
+    return null;
+  }
+
+  function getWordRangeFromPoint(x, y) {
+    const caret = document.caretPositionFromPoint
+      ? document.caretPositionFromPoint(x, y)
+      : null;
+    if (!caret || !caret.offsetNode) return null;
+    const node = caret.offsetNode;
+    if (node.nodeType !== Node.TEXT_NODE) return null;
+    const text = node.textContent;
+    const offset = caret.offset;
+    const start = findWordBoundary(text, offset, -1);
+    const end = findWordBoundary(text, offset, 1);
+    const range = document.createRange();
+    range.setStart(node, start);
+    range.setEnd(node, end);
+    return range;
+  }
+
+  article.addEventListener('touchstart', function(e) {
+    if (e.touches.length > 1) return;
+    const touch = e.touches[0];
+    const startX = touch.clientX;
+    const startY = touch.clientY;
+    touchStartPos = { x: startX, y: startY };
+    activeTouchId = touch.identifier;
+    isLongPressSelecting = false;
+
+    longPressTimer = setTimeout(() => {
+      isLongPressSelecting = true;
+      const range = getWordRangeFromPoint(startX, startY);
+      if (range) {
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    }, LONG_PRESS_DELAY);
+  }, { passive: true });
+
+  article.addEventListener('touchmove', function(e) {
+    const touch = findTouch(e.touches, activeTouchId);
+    if (!touch) return;
+
+    if (!isLongPressSelecting) {
+      if (longPressTimer) {
+        const dx = touch.clientX - touchStartPos.x;
+        const dy = touch.clientY - touchStartPos.y;
+        if (Math.sqrt(dx * dx + dy * dy) > TOUCH_MOVE_THRESHOLD) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      }
+      return;
+    }
+    e.preventDefault();
+    const endRange = getWordRangeFromPoint(touch.clientX, touch.clientY);
+    const sel = window.getSelection();
+    if (endRange && sel.rangeCount) {
+      const current = sel.getRangeAt(0);
+      const startNode = current.startContainer;
+      const startOffset = current.startOffset;
+      const newRange = document.createRange();
+      newRange.setStart(startNode, startOffset);
+      newRange.setEnd(endRange.endContainer, endRange.endOffset);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+    }
+  }, { passive: false });
+
+  article.addEventListener('touchend', function(e) {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+    if (isLongPressSelecting) {
+      isLongPressSelecting = false;
+      setTimeout(showSelectionMenu, 10);
+    } else {
+      window.getSelection().removeAllRanges();
+      hideSelectionMenu();
+    }
+    activeTouchId = null;
+  });
+
+  article.addEventListener('touchcancel', function() {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+    isLongPressSelecting = false;
+    activeTouchId = null;
+  });
+
+  async function precacheAudio() {
+    const article = document.getElementById('article-text');
+    if (!article) return;
+
+    const sentences = Array.from(article.querySelectorAll('p'))
+      .map(p => p.textContent.trim())
+      .filter(text => text.length > 0);
+
+    // Pre-cache the first few paragraphs in the background.
+    const toCache = sentences.slice(0, 3);
+    for (const text of toCache) {
+      try {
+        await fetch('/api/tts/precache', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId, text })
+        });
+      } catch (err) {
+        console.error('Precache failed for paragraph:', err);
+      }
+    }
+  }
+
+  function wrapArticleWords() {
+    const article = document.getElementById('article-text');
+    if (!article) return;
+
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT, null, false);
+    const textNodes = [];
+    let node;
+    while ((node = walker.nextNode())) {
+      if (node.parentElement?.closest('script, style')) continue;
+      textNodes.push(node);
+    }
+
+    const wordRe = /([a-zA-Z0-9'-]+)/g;
+    textNodes.forEach(textNode => {
+      const text = textNode.textContent;
+      if (!wordRe.test(text)) return;
+      wordRe.lastIndex = 0;
+
+      const fragment = document.createDocumentFragment();
+      let lastIndex = 0;
+      let match;
+      while ((match = wordRe.exec(text)) !== null) {
+        if (match.index > lastIndex) {
+          fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+        }
+        const span = document.createElement('span');
+        span.className = 'word-span';
+        span.textContent = match[1];
+        fragment.appendChild(span);
+        lastIndex = wordRe.lastIndex;
+      }
+      if (lastIndex < text.length) {
+        fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+      }
+      textNode.parentNode.replaceChild(fragment, textNode);
+    });
+  }
+
+  // Load vocabulary automatically on page load
+  wrapArticleWords();
+  rebuildWordSpanMap();
+  loadVoices();
+  loadVocab();
+  precacheAudio();
+
+  const audioFab = document.getElementById('audio-fab');
+  const audioFabPlayIcon = document.getElementById('audio-fab-icon-play');
+  const audioFabPauseIcon = document.getElementById('audio-fab-icon-pause');
+  const audioPlayer = document.getElementById('audio-player');
+
+  function updateAudioFabIcon() {
+    if (!audioPlayer.paused && !audioPlayer.ended) {
+      audioFabPlayIcon.classList.add('hidden');
+      audioFabPauseIcon.classList.remove('hidden');
+    } else {
+      audioFabPlayIcon.classList.remove('hidden');
+      audioFabPauseIcon.classList.add('hidden');
+    }
+  }
+
+  let fabHasMoved = false;
+  let fabDrag = { active: false, startY: 0, startTop: 0 };
+  const FAB_DRAG_THRESHOLD = 3;
+
+  function endFabDrag() {
+    if (!fabDrag.active) return;
+    fabDrag.active = false;
+    audioFab.style.transform = '';
+    setTimeout(() => { fabHasMoved = false; }, 50);
+  }
+
+  audioFab.addEventListener('click', function(e) {
+    if (fabHasMoved) return;
+    if (!audioPlayer.src) return;
+    if (audioPlayer.paused || audioPlayer.ended) {
+      audioPlayer.play();
+    } else {
+      audioPlayer.pause();
+    }
+  });
+
+  audioPlayer.addEventListener('play', updateAudioFabIcon);
+  audioPlayer.addEventListener('pause', updateAudioFabIcon);
+  audioPlayer.addEventListener('ended', updateAudioFabIcon);
+
+  function handleFabDragStart(clientY) {
+    fabDrag.active = true;
+    fabDrag.startY = clientY;
+    fabDrag.startTop = audioFab.offsetTop;
+    fabHasMoved = false;
+  }
+
+  function handleFabDragMove(clientY) {
+    if (!fabDrag.active) return;
+    const dy = clientY - fabDrag.startY;
+    if (Math.abs(dy) > FAB_DRAG_THRESHOLD) fabHasMoved = true;
+    const bounds = getMainBounds();
+    const fabHeight = audioFab.offsetHeight;
+    let newTop = fabDrag.startTop + dy;
+    newTop = Math.max(bounds.top + 8, Math.min(bounds.bottom - fabHeight - 8, newTop));
+    audioFab.style.top = newTop + 'px';
+    audioFab.style.transform = 'none';
+  }
+
+  function getMainBounds() {
+    const main = document.querySelector('main.container');
+    if (!main) {
+      return { top: 8, bottom: window.innerHeight - 8 };
+    }
+    const rect = main.getBoundingClientRect();
+    return { top: rect.top, bottom: rect.bottom };
+  }
+
+  function clampFabPosition() {
+    const bounds = getMainBounds();
+    const fabHeight = audioFab.offsetHeight;
+    const minTop = bounds.top + 8;
+    const maxTop = bounds.bottom - fabHeight - 8;
+    if (maxTop <= minTop) return;
+    let currentTop = audioFab.offsetTop;
+    let newTop = Math.max(minTop, Math.min(maxTop, currentTop));
+    audioFab.style.top = newTop + 'px';
+  }
+
+  window.addEventListener('resize', clampFabPosition);
+  clampFabPosition();
+
+  audioFab.addEventListener('mousedown', function(e) {
+    handleFabDragStart(e.clientY);
+  });
+
+  window.addEventListener('mousemove', function(e) {
+    handleFabDragMove(e.clientY);
+  });
+
+  window.addEventListener('mouseup', endFabDrag);
+  window.addEventListener('mouseleave', endFabDrag);
+
+  audioFab.addEventListener('touchstart', function(e) {
+    if (e.touches.length !== 1) return;
+    handleFabDragStart(e.touches[0].clientY);
+  }, { passive: true });
+
+  window.addEventListener('touchmove', function(e) {
+    if (!fabDrag.active) return;
+    const touch = e.touches[0];
+    if (!touch) return;
+    e.preventDefault();
+    handleFabDragMove(touch.clientY);
+  }, { passive: false });
+
+  window.addEventListener('touchend', endFabDrag);
+  window.addEventListener('touchcancel', endFabDrag);
+</script>
+
+{% endblock %}

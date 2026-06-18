@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>佳妍英语阅读 - 太空探险版</title>
+  <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --space-deep: #0A1628;
+      --space-blue: #1A237E;
+      --space-cyan: #00E5FF;
+      --space-orange: #FF9100;
+      --space-purple: #9C27B0;
+      --space-pink: #FF4081;
+      --star: #E1F5FE;
+      --text-light: #E3F2FD;
+      --text-dim: #90CAF9;
+      --white: #FFFFFF;
+      --radius-xl: 24px;
+      --radius-lg: 16px;
+      --glow-cyan: 0 0 20px rgba(0, 229, 255, 0.4);
+      --glow-orange: 0 0 20px rgba(255, 145, 0, 0.4);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Exo 2', system-ui, sans-serif;
+      background: radial-gradient(ellipse at top, var(--space-blue) 0%, var(--space-deep) 60%);
+      min-height: 100vh;
+      color: var(--text-light);
+      line-height: 1.6;
+      position: relative;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-image:
+        radial-gradient(2px 2px at 20px 30px, var(--star), transparent),
+        radial-gradient(2px 2px at 40px 70px, var(--star), transparent),
+        radial-gradient(1px 1px at 90px 40px, var(--star), transparent),
+        radial-gradient(2px 2px at 160px 120px, var(--star), transparent),
+        radial-gradient(1px 1px at 230px 80px, var(--star), transparent),
+        radial-gradient(2px 2px at 300px 150px, var(--star), transparent),
+        radial-gradient(1px 1px at 400px 60px, var(--star), transparent),
+        radial-gradient(2px 2px at 500px 180px, var(--star), transparent);
+      background-size: 550px 220px;
+      opacity: 0.6;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .site-header {
+      background: rgba(10, 22, 40, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 2px solid var(--space-cyan);
+      padding: 18px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: var(--glow-cyan);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--space-cyan);
+      text-shadow: 0 0 16px rgba(0, 229, 255, 0.6);
+      letter-spacing: 2px;
+    }
+
+    .site-header nav a {
+      color: var(--space-orange);
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 16px;
+      padding: 10px 22px;
+      border: 2px solid var(--space-orange);
+      border-radius: 8px;
+      transition: all 0.2s;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .site-header nav a:hover {
+      background: var(--space-orange);
+      color: var(--space-deep);
+      box-shadow: var(--glow-orange);
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 28px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .reading-layout {
+      display: grid;
+      grid-template-columns: 280px 1fr 320px;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .card {
+      background: rgba(26, 35, 126, 0.55);
+      backdrop-filter: blur(10px);
+      border-radius: var(--radius-xl);
+      padding: 24px;
+      border: 2px solid rgba(0, 229, 255, 0.3);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.1);
+      transition: all 0.2s;
+    }
+
+    .card:hover {
+      border-color: var(--space-cyan);
+      box-shadow: var(--glow-cyan), 0 12px 40px rgba(0, 0, 0, 0.5);
+      transform: translateY(-2px);
+    }
+
+    .vocab-card { border-color: rgba(0, 229, 255, 0.4); }
+    .spelling-card { border-color: rgba(255, 145, 0, 0.4); margin-top: 20px; }
+    .article-card { border-color: rgba(156, 39, 176, 0.5); }
+    .chat-panel { border-color: rgba(255, 64, 129, 0.4); }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .card-header h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--space-cyan);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .btn-mini {
+      background: transparent;
+      color: var(--space-cyan);
+      border: 2px solid var(--space-cyan);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 13px;
+    }
+
+    .btn-mini:hover {
+      background: var(--space-cyan);
+      color: var(--space-deep);
+      box-shadow: var(--glow-cyan);
+    }
+
+    .vocab-list {
+      list-style: none;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+
+    .vocab-list li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      background: rgba(10, 22, 40, 0.6);
+      border-radius: 12px;
+      font-size: 14px;
+      flex-wrap: wrap;
+      border-left: 4px solid var(--space-cyan);
+    }
+
+    .vocab-list .word {
+      font-weight: 700;
+      color: var(--space-cyan);
+    }
+
+    .vocab-list .count {
+      color: var(--text-dim);
+      font-size: 12px;
+    }
+
+    .vocab-list .level {
+      padding: 2px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--space-deep);
+    }
+
+    .level.easy { background: var(--space-cyan); }
+    .level.medium { background: var(--space-orange); }
+    .level.hard { background: var(--space-pink); color: var(--white); }
+
+    .spelling-area p {
+      margin-bottom: 10px;
+      font-size: 14px;
+      color: var(--text-dim);
+    }
+
+    .spelling-area input {
+      width: 100%;
+      padding: 12px 16px;
+      background: rgba(10, 22, 40, 0.7);
+      border: 2px solid var(--space-orange);
+      border-radius: 12px;
+      color: var(--white);
+      font-family: inherit;
+      font-size: 15px;
+      margin-bottom: 12px;
+    }
+
+    .spelling-area input::placeholder { color: var(--text-dim); }
+
+    .spelling-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-primary {
+      flex: 1;
+      background: linear-gradient(135deg, var(--space-purple), var(--space-pink));
+      color: var(--white);
+      border: none;
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-family: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 15px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .btn-secondary {
+      flex: 1;
+      background: transparent;
+      color: var(--space-orange);
+      border: 2px solid var(--space-orange);
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-family: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 15px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .btn-primary:hover, .btn-secondary:hover {
+      transform: scale(1.03);
+      box-shadow: var(--glow-orange);
+    }
+
+    .btn-primary:hover { box-shadow: 0 0 20px rgba(156, 39, 176, 0.5); }
+
+    .article-card h1 {
+      font-size: 34px;
+      font-weight: 800;
+      color: var(--space-cyan);
+      margin-bottom: 20px;
+      text-align: center;
+      text-shadow: 0 0 20px rgba(0, 229, 255, 0.5);
+    }
+
+    .article-body {
+      font-size: 18px;
+      line-height: 2;
+      color: var(--text-light);
+    }
+
+    .article-body p {
+      margin-bottom: 18px;
+      text-indent: 2em;
+    }
+
+    .chat-history {
+      height: 320px;
+      overflow-y: auto;
+      padding: 12px;
+      background: rgba(10, 22, 40, 0.5);
+      border-radius: var(--radius-lg);
+      margin-bottom: 16px;
+      border: 1px solid rgba(255, 64, 129, 0.2);
+    }
+
+    .message {
+      padding: 12px 16px;
+      border-radius: 14px;
+      margin-bottom: 12px;
+      max-width: 85%;
+      font-size: 14px;
+    }
+
+    .message.assistant {
+      background: rgba(0, 229, 255, 0.12);
+      border: 1px solid rgba(0, 229, 255, 0.4);
+      color: var(--text-light);
+    }
+
+    .message.user {
+      background: linear-gradient(135deg, var(--space-purple), var(--space-pink));
+      color: var(--white);
+      margin-left: auto;
+      box-shadow: 0 4px 16px rgba(255, 64, 129, 0.3);
+    }
+
+    .chat-input {
+      display: flex;
+      gap: 8px;
+    }
+
+    .chat-input input {
+      flex: 1;
+      padding: 12px 16px;
+      background: rgba(10, 22, 40, 0.7);
+      border: 2px solid var(--space-pink);
+      border-radius: 12px;
+      color: var(--white);
+      font-family: inherit;
+      font-size: 14px;
+    }
+
+    .chat-input input::placeholder { color: var(--text-dim); }
+
+    .btn-mic {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      border: 2px solid var(--space-cyan);
+      background: transparent;
+      color: var(--space-cyan);
+      font-weight: 800;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-mic:hover {
+      background: var(--space-cyan);
+      color: var(--space-deep);
+      box-shadow: var(--glow-cyan);
+    }
+
+    .selection-menu {
+      position: absolute;
+      background: rgba(10, 22, 40, 0.95);
+      border-radius: 12px;
+      box-shadow: var(--glow-cyan);
+      padding: 8px;
+      display: flex;
+      gap: 6px;
+      z-index: 50;
+      border: 2px solid var(--space-cyan);
+    }
+
+    .selection-menu button {
+      border: 1px solid var(--space-cyan);
+      background: transparent;
+      color: var(--space-cyan);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .selection-menu button:hover {
+      background: var(--space-cyan);
+      color: var(--space-deep);
+    }
+
+    .hidden { display: none !important; }
+
+    .site-footer {
+      text-align: center;
+      padding: 24px;
+      color: var(--text-dim);
+      font-weight: 600;
+      position: relative;
+      z-index: 1;
+    }
+
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+    ::-webkit-scrollbar-thumb { background: var(--space-cyan); border-radius: 10px; }
+
+    @media (max-width: 1100px) {
+      .reading-layout { grid-template-columns: 1fr; }
+      .column-left, .column-right { order: 2; }
+      .column-middle { order: 1; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="logo">🚀 佳妍英语阅读</div>
+    <nav><a href="#">首页</a></nav>
+  </header>
+
+  <main class="container">
+    <div class="reading-layout">
+      <aside class="column-left">
+        <section class="card vocab-card">
+          <div class="card-header">
+            <h2>⭐ 生词本</h2>
+            <button class="btn-mini">刷新</button>
+          </div>
+          <ul class="vocab-list">
+            <li><span class="word">rabbit</span> <span class="count">出现 3 次</span> <span class="level easy">简单</span> <button class="btn-mini">读</button></li>
+            <li><span class="word">forest</span> <span class="count">出现 2 次</span> <span class="level medium">中等</span> <button class="btn-mini">读</button></li>
+            <li><span class="word">curious</span> <span class="count">出现 2 次</span> <span class="level hard">较难</span> <button class="btn-mini">读</button></li>
+            <li><span class="word">carrot</span> <span class="count">出现 1 次</span> <span class="level easy">简单</span> <button class="btn-mini">读</button></li>
+          </ul>
+        </section>
+
+        <section class="card spelling-card">
+          <div class="card-header"><h2>🛸 拼写练习</h2></div>
+          <div class="spelling-area">
+            <p>请拼写单词（长度 6）</p>
+            <input type="text" placeholder="输入单词">
+            <div class="spelling-actions">
+              <button class="btn-primary">提交</button>
+              <button class="btn-secondary">下一个</button>
+            </div>
+          </div>
+        </section>
+      </aside>
+
+      <section class="column-middle article-card card">
+        <h1>The Little Rabbit</h1>
+        <article class="article-body">
+          <p>Once upon a time, there was a little rabbit named Benny. He lived in a small hole under a big oak tree in the forest. Benny was very curious and loved to explore.</p>
+          <p>One sunny morning, Benny hopped out of his hole. He saw a bright orange carrot in the garden. "Yum!" he said. "I want that carrot for my breakfast."</p>
+          <p>Benny hopped quickly across the grass. He looked left and right. Then he pulled the carrot out of the ground. It was the biggest carrot he had ever seen!</p>
+        </article>
+      </section>
+
+      <aside class="column-right chat-panel card">
+        <div class="card-header"><h2>📡 问老师</h2></div>
+        <div class="chat-history">
+          <div class="message assistant">你好！有不认识的单词或任何问题，都可以问我。</div>
+          <div class="message user">rabbit 是什么意思？</div>
+          <div class="message assistant">rabbit 是「兔子」的意思，是一种长耳朵、会跳的小动物。</div>
+        </div>
+        <div class="chat-input">
+          <input type="text" placeholder="输入问题...">
+          <button class="btn-mic">麦</button>
+          <button class="btn-primary">发送</button>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <div id="selection-menu" class="selection-menu hidden">
+    <button>翻译</button>
+    <button>朗读</button>
+    <button>取消</button>
+  </div>
+
+  <footer class="site-footer">陪小学生快乐读英语</footer>
+
+  <script>
+    const article = document.querySelector('.article-body');
+    const menu = document.getElementById('selection-menu');
+
+    article.addEventListener('mouseup', () => {
+      const text = window.getSelection().toString().trim();
+      if (text && text.length < 200) {
+        const range = window.getSelection().getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        menu.style.left = (rect.left + window.scrollX) + 'px';
+        menu.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+        menu.classList.remove('hidden');
+      }
+    });
+
+    document.addEventListener('mousedown', (e) => {
+      if (!menu.contains(e.target)) menu.classList.add('hidden');
+    });
+  </script>
+</body>
+</html>

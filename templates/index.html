@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Add Reading - Jiayan English Reading{% endblock %}
+
+{% block content %}
+<section class="card upload-card">
+  <h1>Add Today's Reading</h1>
+  <p class="subtitle">Upload a photo, paste a link, or type text</p>
+
+  <form action="{{ url_for('load_material') }}" method="post" enctype="multipart/form-data" class="upload-form">
+    <div class="form-group">
+      <label for="source_type">Source</label>
+      <select name="source_type" id="source_type">
+        <option value="text" selected>Type Text</option>
+        <option value="file">Photo / File Upload</option>
+        <option value="url">Web Link</option>
+      </select>
+    </div>
+
+    <div class="form-group source-box" id="box-file">
+      <label for="file">Choose Image or Document</label>
+      <input type="file" name="file" id="file" accept=".png,.jpg,.jpeg,.gif,.bmp,.webp,.pdf,.docx,.txt,.md">
+      <p class="hint">Supports images, PDF, Word and text files</p>
+    </div>
+
+    <div class="form-group source-box hidden" id="box-url">
+      <label for="url">Web Link</label>
+      <input type="url" name="url" id="url" placeholder="https://example.com/story">
+    </div>
+
+    <div class="form-group source-box hidden" id="box-text">
+      <label for="text">Enter English Text</label>
+      <textarea name="text" id="text" rows="8" placeholder="Paste English text here"></textarea>
+    </div>
+
+    <button type="submit" class="btn-primary">Start Reading</button>
+  </form>
+</section>
+
+{% if projects %}
+<section class="card projects-card">
+  <div class="card-header">
+    <h2>Saved Projects</h2>
+  </div>
+  <ul class="project-list" id="project-list">
+    {% for project in projects %}
+    <li data-session-id="{{ project.session_id }}">
+      <a href="{{ url_for('read', article_id=project.article_id, session_id=project.session_id) }}" class="project-title">
+        {{ project.title }}
+      </a>
+      <span class="project-date">{{ project.updated_at[:10] }}</span>
+      <button class="btn-mini btn-danger" onclick="deleteProject('{{ project.session_id }}')">Delete</button>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<script>
+  async function deleteProject(sessionId) {
+    if (!confirm('Delete this project?')) return;
+    try {
+      const res = await fetch('/api/projects/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        const li = document.querySelector('li[data-session-id="' + sessionId + '"]');
+        if (li) li.remove();
+        const list = document.getElementById('project-list');
+        if (list && !list.children.length) {
+          list.closest('.projects-card').remove();
+        }
+      } else {
+        alert(data.error || 'Failed to delete project');
+      }
+    } catch (err) {
+      alert('Delete failed: ' + err);
+    }
+  }
+
+  const typeSelect = document.getElementById('source_type');
+  const boxes = {
+    file: document.getElementById('box-file'),
+    url: document.getElementById('box-url'),
+    text: document.getElementById('box-text'),
+  };
+
+  function updateBoxes() {
+    const value = typeSelect.value;
+    for (const key in boxes) {
+      boxes[key].classList.toggle('hidden', key !== value);
+    }
+  }
+
+  typeSelect.addEventListener('change', updateBoxes);
+  updateBoxes();
+</script>
+{% endblock %}
