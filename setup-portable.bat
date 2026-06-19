@@ -1,4 +1,5 @@
-@echo off
+﻿@echo off
+chcp 65001 >nul
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
@@ -66,6 +67,24 @@ if errorlevel 1 (
 )
 
 :install_deps
+REM Ensure pip is installed before installing dependencies.
+"%PYTHON_EXE%" -m pip --version >nul 2>&1
+if errorlevel 1 (
+    echo 正在安装 pip ...
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://bootstrap.pypa.io/get-pip.py' -OutFile '%PYTHON_DIR%\get-pip.py' -UseBasicParsing"
+    if errorlevel 1 (
+        echo get-pip.py 下载失败。
+        pause
+        exit /b 1
+    )
+    "%PYTHON_EXE%" "%PYTHON_DIR%\get-pip.py"
+    if errorlevel 1 (
+        echo pip 安装失败。
+        pause
+        exit /b 1
+    )
+)
+
 echo 正在安装/更新依赖（requirements.txt）...
 "%PYTHON_EXE%" -m pip install -r requirements.txt --no-cache-dir
 if errorlevel 1 (
